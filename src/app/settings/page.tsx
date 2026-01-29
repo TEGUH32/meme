@@ -24,11 +24,11 @@ import {
   Globe,
   Lock,
   Key,
-  AlertTriangle,
-  CheckCircle
+  AlertTriangle
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
+import { Textarea } from '@/components/ui/textarea'
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -47,6 +47,8 @@ export default function SettingsPage() {
     showEmail: false,
     showStats: true
   })
+  const [name, setName] = useState('')
+  const [bio, setBio] = useState('')
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -54,17 +56,79 @@ export default function SettingsPage() {
     }
   }, [isLoading, isAuthenticated, router])
 
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '')
+      setBio(user.bio || '')
+    }
+  }, [user])
+
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/auth/signin' })
   }
 
   const handleSaveSettings = async () => {
     setLoading(true)
-    // Simulate saving
-    setTimeout(() => {
+    try {
+      // Simpan perubahan ke server
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          bio
+        }),
+      })
+
+      if (response.ok) {
+        toast.success('Pengaturan berhasil disimpan!')
+        
+        // Refresh user data
+        if (user) {
+          // Update local state
+          user.name = name
+          user.bio = bio
+        }
+      } else {
+        const error = await response.json()
+        toast.error(error.message || 'Gagal menyimpan pengaturan')
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan saat menyimpan pengaturan')
+      console.error('Error saving settings:', error)
+    } finally {
       setLoading(false)
-      toast.success('Pengaturan berhasil disimpan!')
-    }, 1000)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('Apakah Anda yakin ingin menghapus akun? Tindakan ini tidak dapat dibatalkan!')) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/user/delete', {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast.success('Akun berhasil dihapus')
+        await signOut({ callbackUrl: '/' })
+      } else {
+        const error = await response.json()
+        toast.error(error.message || 'Gagal menghapus akun')
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan saat menghapus akun')
+      console.error('Error deleting account:', error)
+    }
+  }
+
+  const handleChangePassword = () => {
+    // Implement change password logic here
+    toast.info('Fitur ganti password akan segera tersedia')
   }
 
   if (isLoading) {
@@ -78,7 +142,7 @@ export default function SettingsPage() {
     )
   }
 
-  if (!isAuthenticated || !user) {
+  if (!isAuthenticated) {
     return null
   }
 
@@ -122,7 +186,7 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Email</Label>
-                  <Input value={user.email} disabled />
+                  <Input value={user?.email || ''} disabled />
                   <p className="text-xs text-muted-foreground">
                     Email tidak dapat diubah. Hubungi support jika perlu mengubah email.
                   </p>
@@ -130,19 +194,57 @@ export default function SettingsPage() {
 
                 <div className="space-y-2">
                   <Label>Nama</Label>
-                  <Input defaultValue={user.name} placeholder="Nama kamu" />
+                  <Input 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Nama kamu" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Username</Label>
+                  <Input 
+                    value={user?.username || ''} 
+                    disabled
+                    placeholder="Username"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Username tidak dapat diubah
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Bio</Label>
-                  <textarea
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  <Textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
                     placeholder="Ceritakan tentang dirimu..."
                     rows={3}
                   />
                 </div>
 
-                <Button onClick={handleSaveSettings} disabled={loading}>
+                <div className="pt-4">
+                  <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">{user?.level || 1}</div>
+                      <div className="text-xs text-muted-foreground">Level</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">{user?.coins || 0}</div>
+                      <div className="text-xs text-muted-foreground">Koin</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">{user?.streak || 0}</div>
+                      <div className="text-xs text-muted-foreground">Streak</div>
+                    </div>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleSaveSettings} 
+                  disabled={loading || (!name.trim() && name !== user?.name)}
+                  className="w-full"
+                >
                   <Save className="h-4 w-4 mr-2" />
                   {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </Button>
@@ -165,7 +267,11 @@ export default function SettingsPage() {
                   <p className="text-sm text-muted-foreground mb-4">
                     Menghapus akun akan menghapus semua data kamu secara permanen termasuk meme, komentar, dan statistik.
                   </p>
-                  <Button variant="destructive">
+                  <Button 
+                    variant="destructive" 
+                    onClick={handleDeleteAccount}
+                    className="w-full"
+                  >
                     <LogOut className="h-4 w-4 mr-2" />
                     Hapus Akun Saya
                   </Button>
@@ -261,7 +367,11 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <Button onClick={handleSaveSettings} disabled={loading}>
+                <Button 
+                  onClick={handleSaveSettings} 
+                  disabled={loading}
+                  className="w-full"
+                >
                   <Save className="h-4 w-4 mr-2" />
                   {loading ? 'Menyimpan...' : 'Simpan Preferensi'}
                 </Button>
@@ -326,7 +436,11 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <Button onClick={handleSaveSettings} disabled={loading}>
+                <Button 
+                  onClick={handleSaveSettings} 
+                  disabled={loading}
+                  className="w-full"
+                >
                   <Save className="h-4 w-4 mr-2" />
                   {loading ? 'Menyimpan...' : 'Simpan Pengaturan'}
                 </Button>
@@ -341,7 +455,11 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full justify-start">
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start"
+                  onClick={handleChangePassword}
+                >
                   <Lock className="h-4 w-4 mr-2" />
                   Ganti Password
                 </Button>
@@ -397,11 +515,34 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
-                  <h3 className="font-semibold mb-2">Tema Aktif: {theme}</h3>
+                  <h3 className="font-semibold mb-2">
+                    Tema Aktif: {theme === 'light' ? 'Light' : theme === 'dark' ? 'Dark' : 'System'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     Teks ini ditampilkan dengan tema yang dipilih.
                   </p>
                 </div>
+
+                <Button 
+                  onClick={() => {
+                    setTheme(theme === 'light' ? 'dark' : 'light')
+                    toast.success('Tema berhasil diubah!')
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {theme === 'light' ? (
+                    <>
+                      <Moon className="h-4 w-4 mr-2" />
+                      Ganti ke Dark Mode
+                    </>
+                  ) : (
+                    <>
+                      <Sun className="h-4 w-4 mr-2" />
+                      Ganti ke Light Mode
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
