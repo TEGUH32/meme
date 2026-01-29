@@ -11,70 +11,138 @@ datasource db {
 
 // User model with auth and gamification
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String?
-  image         String?
-  bio           String?
-  location      String?
-  website       String?
-  googleId      String?  @unique
-  coins         Int      @default(0)
-  level         Int      @default(1)
-  totalMemes    Int      @default(0)
-  totalComments Int      @default(0)
-  totalLikes    Int      @default(0)
-  streak        Int      @default(0)
-  referralCode  String?  @unique
-  referredBy    String?
-  isPremium     Boolean  @default(false)
-  premiumExpiry DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String
+  username         String?   @unique
+  password         String?
+  image            String?
+  bio              String?
+  location         String?
+  website          String?
+  googleId         String?   @unique
+  coins            Int       @default(100)
+  level            Int       @default(1)
+  xp               Int       @default(0)
+  role             String    @default("USER")
+  totalMemes       Int       @default(0)
+  totalComments    Int       @default(0)
+  totalLikes       Int       @default(0)
+  streak           Int       @default(0)
+  referralCode     String?   @unique
+  referredBy       String?
+  isPremium        Boolean   @default(false)
+  premiumExpiry    DateTime?
+  isVerified       Boolean   @default(false)
+  lastLogin        DateTime?
+  lastStreakUpdate DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
-  memes         Meme[]
-  comments      Comment[]
-  votes         Vote[]
-  badges        UserBadge[]
-  notifications Notification[]
-  bookmarks     Bookmark[]
-  reports       Report[]
-  referrals     Referral[]  @relation("Referrer")
-  referredByUser Referral?  @relation("Referred")
-  followers     Follow[]    @relation("Follower")
-  following     Follow[]    @relation("Following")
-  topicFollows  TopicFollow[]
-  transactions  Transaction[]
+  memes            Meme[]
+  comments         Comment[]
+  votes            Vote[]
+  badges           UserBadge[]
+  notifications    Notification[]
+  bookmarks        Bookmark[]
+  reports          Report[]
+  referrals        Referral[]  @relation("Referrer")
+  referredByUser   Referral?   @relation("Referred")
+  followers        Follow[]    @relation("Follower")
+  following        Follow[]    @relation("Following")
+  topicFollows     TopicFollow[]
+  transactions     Transaction[]
+  sessions         Session[]
+  accounts         Account[]
+
+  // Indexes
+  @@index([email])
+  @@index([username])
+  @@index([referralCode])
+  @@index([createdAt])
+}
+
+// NextAuth Session model
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId])
+}
+
+// NextAuth Account model
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+// Verification Token model (for email verification)
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 // Meme/Post model with video support
 model Meme {
-  id          String   @id @default(cuid())
-  title       String
-  imageUrl    String
-  videoUrl    String?
-  caption     String?
-  category    String
-  tags        String?  // Comma-separated tags
-  region      String?
-  school      String?
-  authorId    String
-  isAnonymous Boolean  @default(false)
-  viralScore  Int      @default(0)
-  views       Int      @default(0)
-  shares      Int      @default(0)
-  isVideo     Boolean  @default(false)
-  isPremium   Boolean  @default(false) // Premium-only memes
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  title        String
+  imageUrl     String
+  videoUrl     String?
+  caption      String?
+  category     String
+  tags         String?  // Comma-separated tags
+  region       String?
+  school       String?
+  authorId     String
+  isAnonymous  Boolean  @default(false)
+  viralScore   Int      @default(0)
+  views        Int      @default(0)
+  shares       Int      @default(0)
+  isVideo      Boolean  @default(false)
+  isPremium    Boolean  @default(false) // Premium-only memes
+  isFeatured   Boolean  @default(false)
+  isNSFW       Boolean  @default(false)
+  isReported   Boolean  @default(false)
+  reportCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
-  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  comments    Comment[]
-  votes       Vote[]
-  bookmarks   Bookmark[]
-  topics      MemeTopic[]
+  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments     Comment[]
+  votes        Vote[]
+  bookmarks    Bookmark[]
+  topics       MemeTopic[]
+  memeReports  Report[]
+
+  // Indexes
+  @@index([authorId])
+  @@index([category])
+  @@index([createdAt])
+  @@index([viralScore])
+  @@index([isFeatured])
 }
 
 // Comment model
@@ -83,12 +151,22 @@ model Comment {
   content   String
   memeId    String
   userId    String
+  parentId  String?  // For nested comments
+  likes     Int      @default(0)
+  isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meme       Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent     Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    Comment[] @relation("CommentReplies")
+
+  // Indexes
+  @@index([memeId])
+  @@index([userId])
+  @@index([parentId])
 }
 
 // Vote model (like/dislike)
@@ -104,6 +182,9 @@ model Vote {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([memeId, userId])
+  @@index([memeId])
+  @@index([userId])
+  @@index([type])
 }
 
 // Badge/Achievement model
@@ -113,13 +194,20 @@ model Badge {
   description String
   icon        String?
   color       String?
-  coinReward Int      @default(0)
+  coinReward  Int      @default(0)
+  xpReward    Int      @default(0)
   level       Int      @default(1)
-  category    String   // 'content', 'social', 'special'
+  category    String   // 'content', 'social', 'special', 'milestone'
+  requirement Int      @default(1) // e.g., 10 memes, 50 likes, etc.
+  isHidden    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   // Relations
   users       UserBadge[]
+
+  // Indexes
+  @@index([category])
+  @@index([level])
 }
 
 // User-Badge junction table with progress
@@ -130,18 +218,21 @@ model UserBadge {
   progress    Int      @default(0)
   target      Int      @default(1)
   earnedAt    DateTime @default(now())
+  isEquipped  Boolean  @default(false)
 
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge       Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
   @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
 }
 
 // Notification model
 model Notification {
   id        String   @id @default(cuid())
-  type      String   // 'like', 'comment', 'badge', 'coin', 'follow', 'system', 'premium'
+  type      String   // 'like', 'comment', 'badge', 'coin', 'follow', 'system', 'premium', 'mention'
   title     String
   message   String
   userId    String
@@ -152,6 +243,11 @@ model Notification {
 
   // Relations
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
 }
 
 // Bookmark model
@@ -159,6 +255,7 @@ model Bookmark {
   id        String   @id @default(cuid())
   memeId    String
   userId    String
+  folder    String?  @default("default")
   createdAt DateTime @default(now())
 
   // Relations
@@ -166,23 +263,37 @@ model Bookmark {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([memeId, userId])
+  @@index([userId])
+  @@index([folder])
 }
 
 // Report/Bug report model
 model Report {
-  id        String   @id @default(cuid())
-  type      String   // 'bug', 'content', 'user'
-  title     String
-  content   String
-  memeId    String?
+  id             String   @id @default(cuid())
+  type           String   // 'bug', 'content', 'user', 'meme'
+  title          String
+  content        String
+  memeId         String?
   reportedUserId String?
-  reporterId String
-  status    String   @default("pending") // 'pending', 'reviewed', 'resolved'
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  reporterId     String
+  status         String   @default("pending") // 'pending', 'reviewed', 'resolved', 'dismissed'
+  priority       String   @default("medium")  // 'low', 'medium', 'high', 'critical'
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  resolutionNote String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Relations
-  reporter   User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter       User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  meme           Meme?    @relation(fields: [memeId], references: [id])
+  reportedUser   User?    @relation(fields: [reportedUserId], references: [id])
+
+  // Indexes
+  @@index([type])
+  @@index([status])
+  @@index([reporterId])
+  @@index([createdAt])
 }
 
 // FAQ model
@@ -192,24 +303,37 @@ model FAQ {
   answer    String
   category  String
   order     Int      @default(0)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Indexes
+  @@index([category])
+  @@index([order])
 }
 
 // Topic model for following topics
 model Topic {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
   description String?
-  icon      String?
-  memeCount Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  icon        String?
+  color       String?
+  memeCount   Int      @default(0)
+  isTrending  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  followers TopicFollow[]
-  memes     MemeTopic[]
+  followers   TopicFollow[]
+  memes       MemeTopic[]
+
+  // Indexes
+  @@index([slug])
+  @@index([isTrending])
+  @@index([memeCount])
 }
 
 // Topic-Follow junction table
@@ -224,6 +348,8 @@ model TopicFollow {
   topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
 }
 
 // Meme-Topic junction table
@@ -238,6 +364,8 @@ model MemeTopic {
   topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@unique([memeId, topicId])
+  @@index([memeId])
+  @@index([topicId])
 }
 
 // Follow model for following users
@@ -252,6 +380,8 @@ model Follow {
   following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
 }
 
 // Referral model
@@ -260,24 +390,101 @@ model Referral {
   referrerId    String
   referredId    String   @unique
   coinReward    Int      @default(50)
-  status        String   @default("completed") // 'pending', 'completed'
+  xpReward      Int      @default(10)
+  status        String   @default("pending") // 'pending', 'completed', 'expired'
+  completedAt   DateTime?
   createdAt     DateTime @default(now())
 
   // Relations
   referrer      User     @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
   referredUser  User     @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([referrerId])
+  @@index([status])
 }
 
 // Transaction model for coin transactions
 model Transaction {
   id          String   @id @default(cuid())
   userId      String
-  type        String   // 'earned', 'spent', 'referral', 'premium', 'reward'
+  type        String   // 'earned', 'spent', 'referral', 'premium', 'reward', 'purchase', 'refund'
   amount      Int
+  balance     Int      // Balance after transaction
   description String
   metadata    String?  // JSON string for additional data
+  referenceId String?  // Reference to related entity (memeId, badgeId, etc.)
   createdAt   DateTime @default(now())
 
   // Relations
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Level system model
+model Level {
+  id          String   @id @default(cuid())
+  levelNumber Int      @unique
+  xpRequired  Int
+  coinReward  Int      @default(0)
+  badgeReward String?
+  title       String?
+  perks       String?  // JSON string for perks
+  createdAt   DateTime @default(now())
+
+  // Indexes
+  @@index([levelNumber])
+}
+
+// Ads/Sponsorship model
+model Ad {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String
+  linkUrl     String
+  advertiser  String
+  budget      Float    @default(0)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(true)
+  targetTags  String?  // Comma-separated tags for targeting
+  targetRegion String?
+  priority    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Indexes
+  @@index([isActive])
+  @@index([endDate])
+  @@index([priority])
+}
+
+// Ad impression tracking
+model AdImpression {
+  id        String   @id @default(cuid())
+  adId      String
+  userId    String?
+  memeId    String?
+  type      String   // 'view', 'click'
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  ad        Ad      @relation(fields: [adId], references: [id], onDelete: Cascade)
+  user      User?   @relation(fields: [userId], references: [id])
+  meme      Meme?   @relation(fields: [memeId], references: [id])
+
+  // Indexes
+  @@index([adId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
 }
