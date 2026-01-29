@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/use-auth'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -49,7 +49,7 @@ export default function DashboardPage() {
     }
   }, [isLoading, isAuthenticated, router])
 
-  const fetchUserStats = async () => {
+  const fetchUserStats = useCallback(async () => {
     try {
       const response = await fetch(`/api/users?id=${user?.id}`)
       const data = await response.json()
@@ -64,9 +64,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching stats:', error)
     }
-  }
+  }, [user])
 
-  const fetchRecentActivity = async () => {
+  const fetchRecentActivity = useCallback(async () => {
     try {
       const response = await fetch(`/api/memes`)
       const data = await response.json()
@@ -76,9 +76,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching activity:', error)
     }
-  }
+  }, [])
 
-  const fetchFollowStats = async () => {
+  const fetchFollowStats = useCallback(async () => {
     try {
       const response = await fetch(`/api/follow?userId=${user?.id}`)
       const data = await response.json()
@@ -86,9 +86,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching follow stats:', error)
     }
-  }
+  }, [user])
 
-  const fetchTopics = async () => {
+  const fetchTopics = useCallback(async () => {
     try {
       const response = await fetch(`/api/topics`)
       const data = await response.json()
@@ -96,9 +96,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching topics:', error)
     }
-  }
+  }, [])
 
-  const fetchReferralData = async () => {
+  const fetchReferralData = useCallback(async () => {
     try {
       const response = await fetch(`/api/referral`)
       const data = await response.json()
@@ -106,9 +106,9 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching referral data:', error)
     }
-  }
+  }, [])
 
-  const fetchBadges = async () => {
+  const fetchBadges = useCallback(async () => {
     try {
       const response = await fetch(`/api/badges?userId=${user?.id}`)
       const data = await response.json()
@@ -116,10 +116,11 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error fetching badges:', error)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchUserStats()
       fetchRecentActivity()
       fetchFollowStats()
@@ -127,7 +128,7 @@ export default function DashboardPage() {
       fetchReferralData()
       fetchBadges()
     }
-  }, [user])
+  }, [user, fetchUserStats, fetchRecentActivity, fetchFollowStats, fetchTopics, fetchReferralData, fetchBadges])
 
   if (isLoading) {
     return (
