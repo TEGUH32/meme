@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth'; // SUDAH DIPERBAIKI
 import { db } from '@/lib/db';
 
 // Get transaction history
 export async function GET(request: NextRequest) {
   try {
+    // Mengambil session berdasarkan authOptions dari lib
     const session = await getServerSession(authOptions);
+    
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-    const type = searchParams.get('type'); // Filter by type: earned, spent, referral, premium, reward
+    const type = searchParams.get('type'); 
 
     const whereClause: any = { userId: user.id };
     if (type) {
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
       skip: offset
     });
 
-    // Calculate totals
+    // Calculate totals menggunakan aggregate/groupBy
     const totals = await db.transaction.groupBy({
       by: ['type'],
       where: { userId: user.id },
@@ -46,11 +48,11 @@ export async function GET(request: NextRequest) {
     });
 
     const totalEarned = totals
-      .filter(t => t.type === 'earned' || t.type === 'referral' || t.type === 'reward')
+      .filter(t => ['earned', 'referral', 'reward'].includes(t.type))
       .reduce((sum, t) => sum + (t._sum.amount || 0), 0);
 
     const totalSpent = totals
-      .filter(t => t.type === 'spent' || t.type === 'premium')
+      .filter(t => ['spent', 'premium'].includes(t.type))
       .reduce((sum, t) => sum + (t._sum.amount || 0), 0);
 
     return NextResponse.json({
