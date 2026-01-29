@@ -1,0 +1,283 @@
+// This is your Prisma schema file for MemeVerse
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model with auth and gamification
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  image         String?
+  bio           String?
+  location      String?
+  website       String?
+  googleId      String?  @unique
+  coins         Int      @default(0)
+  level         Int      @default(1)
+  totalMemes    Int      @default(0)
+  totalComments Int      @default(0)
+  totalLikes    Int      @default(0)
+  streak        Int      @default(0)
+  referralCode  String?  @unique
+  referredBy    String?
+  isPremium     Boolean  @default(false)
+  premiumExpiry DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  memes         Meme[]
+  comments      Comment[]
+  votes         Vote[]
+  badges        UserBadge[]
+  notifications Notification[]
+  bookmarks     Bookmark[]
+  reports       Report[]
+  referrals     Referral[]  @relation("Referrer")
+  referredByUser Referral?  @relation("Referred")
+  followers     Follow[]    @relation("Follower")
+  following     Follow[]    @relation("Following")
+  topicFollows  TopicFollow[]
+  transactions  Transaction[]
+}
+
+// Meme/Post model with video support
+model Meme {
+  id          String   @id @default(cuid())
+  title       String
+  imageUrl    String
+  videoUrl    String?
+  caption     String?
+  category    String
+  tags        String?  // Comma-separated tags
+  region      String?
+  school      String?
+  authorId    String
+  isAnonymous Boolean  @default(false)
+  viralScore  Int      @default(0)
+  views       Int      @default(0)
+  shares      Int      @default(0)
+  isVideo     Boolean  @default(false)
+  isPremium   Boolean  @default(false) // Premium-only memes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  votes       Vote[]
+  bookmarks   Bookmark[]
+  topics      MemeTopic[]
+}
+
+// Comment model
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  memeId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Vote model (like/dislike)
+model Vote {
+  id        String   @id @default(cuid())
+  type      String   // 'up' or 'down'
+  memeId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([memeId, userId])
+}
+
+// Badge/Achievement model
+model Badge {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  icon        String?
+  color       String?
+  coinReward Int      @default(0)
+  level       Int      @default(1)
+  category    String   // 'content', 'social', 'special'
+  createdAt   DateTime @default(now())
+
+  // Relations
+  users       UserBadge[]
+}
+
+// User-Badge junction table with progress
+model UserBadge {
+  id          String   @id @default(cuid())
+  userId      String
+  badgeId     String
+  progress    Int      @default(0)
+  target      Int      @default(1)
+  earnedAt    DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge       Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+// Notification model
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // 'like', 'comment', 'badge', 'coin', 'follow', 'system', 'premium'
+  title     String
+  message   String
+  userId    String
+  isRead    Boolean  @default(false)
+  actionUrl String?  // URL to navigate when clicked
+  metadata  String?  // JSON string for additional data
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Bookmark model
+model Bookmark {
+  id        String   @id @default(cuid())
+  memeId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  // Relations
+  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([memeId, userId])
+}
+
+// Report/Bug report model
+model Report {
+  id        String   @id @default(cuid())
+  type      String   // 'bug', 'content', 'user'
+  title     String
+  content   String
+  memeId    String?
+  reportedUserId String?
+  reporterId String
+  status    String   @default("pending") // 'pending', 'reviewed', 'resolved'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  reporter   User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+}
+
+// FAQ model
+model FAQ {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  category  String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Topic model for following topics
+model Topic {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  description String?
+  icon      String?
+  memeCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  followers TopicFollow[]
+  memes     MemeTopic[]
+}
+
+// Topic-Follow junction table
+model TopicFollow {
+  id        String   @id @default(cuid())
+  userId    String
+  topicId   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+}
+
+// Meme-Topic junction table
+model MemeTopic {
+  id        String   @id @default(cuid())
+  memeId    String
+  topicId   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([memeId, topicId])
+}
+
+// Follow model for following users
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+}
+
+// Referral model
+model Referral {
+  id            String   @id @default(cuid())
+  referrerId    String
+  referredId    String   @unique
+  coinReward    Int      @default(50)
+  status        String   @default("completed") // 'pending', 'completed'
+  createdAt     DateTime @default(now())
+
+  // Relations
+  referrer      User     @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUser  User     @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+}
+
+// Transaction model for coin transactions
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // 'earned', 'spent', 'referral', 'premium', 'reward'
+  amount      Int
+  description String
+  metadata    String?  // JSON string for additional data
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
