@@ -27,12 +27,15 @@ import {
   MessageCircle,
   TrendingUp,
   Crown,
-  Users
+  Users,
+  CheckCircle,
+  XCircle
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
+import { toast } from 'sonner'
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading, updateUser } = useAuth()
   const router = useRouter()
   const { update: updateSession } = useSession()
   const [isEditing, setIsEditing] = useState(false)
@@ -57,9 +60,9 @@ export default function ProfilePage() {
     if (user) {
       setFormData({
         name: user.name || '',
-        bio: '',
-        location: '',
-        website: ''
+        bio: user.bio || '',
+        location: user.location || '',
+        website: user.website || ''
       })
       fetchUserMemes()
       fetchFollowStats()
@@ -100,20 +103,48 @@ export default function ProfilePage() {
   }
 
   const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Nama tidak boleh kosong')
+      return
+    }
+
     setLoading(true)
     try {
-      const response = await fetch('/api/users/update', {
-        method: 'PATCH',
+      const response = await fetch('/api/users/settings', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          type: 'profile',
+          data: formData
+        })
       })
 
-      if (response.ok) {
+      const result = await response.json()
+
+      if (response.ok && result) {
+        // Update user context
+        updateUser(result)
+        
+        // Update session
         await updateSession()
+        
         setIsEditing(false)
+        toast.success('Profil berhasil diperbarui!', {
+          description: 'Perubahan profil kamu telah disimpan',
+          icon: <CheckCircle className="h-5 w-5 text-green-500" />
+        })
+      } else {
+        toast.error('Gagal memperbarui profil', {
+          description: result.error || 'Terjadi kesalahan saat menyimpan',
+          icon: <XCircle className="h-5 w-5 text-red-500" />
+        })
       }
     } catch (error) {
       console.error('Error updating profile:', error)
+      toast.error('Terjadi kesalahan', {
+        description: 'Gagal menyimpan profil',
+        icon: <XCircle className="h-5 w-5 text-red-500" />
+      })
     } finally {
       setLoading(false)
     }

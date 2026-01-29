@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { MemeUpload } from '@/components/meme-upload'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,7 +72,6 @@ export default function HomePage() {
   const [likedMemes, setLikedMemes] = useState<Set<string>>(new Set())
   const [loadingLike, setLoadingLike] = useState<Set<string>>(new Set())
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [newMeme, setNewMeme] = useState({ title: '', imageUrl: '', caption: '', category: 'Funny' })
   const [comments, setComments] = useState<{ [key: string]: any[] }>({})
   const [newComments, setNewComments] = useState<{ [key: string]: string }>({})
   const [showComments, setShowComments] = useState<{ [key: string]: boolean }>({})
@@ -568,61 +568,20 @@ export default function HomePage() {
                         Buat Meme
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Buat Meme Baru</DialogTitle>
                         <DialogDescription>
-                          Buat dan bagikan meme kreatifmu ke komunitas
+                          Upload dan bagikan meme kreatifmu ke komunitas
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label>Judul</Label>
-                          <Input
-                            placeholder="Beri judul meme-mu"
-                            value={newMeme.title}
-                            onChange={(e) => setNewMeme(prev => ({ ...prev, title: e.target.value }))}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>URL Gambar</Label>
-                          <Input
-                            placeholder="https://example.com/image.jpg"
-                            value={newMeme.imageUrl}
-                            onChange={(e) => setNewMeme(prev => ({ ...prev, imageUrl: e.target.value }))}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Kategori</Label>
-                          <ScrollArea className="h-32 w-full border rounded-md p-2">
-                            <div className="flex flex-wrap gap-2">
-                              {CATEGORIES.map((cat) => (
-                                <Badge
-                                  key={cat}
-                                  variant={newMeme.category === cat ? 'default' : 'outline'}
-                                  className="cursor-pointer"
-                                  onClick={() => setNewMeme(prev => ({ ...prev, category: cat }))}
-                                >
-                                  {cat}
-                                </Badge>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Caption (Opsional)</Label>
-                          <Textarea
-                            placeholder="Tambahkan caption..."
-                            value={newMeme.caption}
-                            onChange={(e) => setNewMeme(prev => ({ ...prev, caption: e.target.value }))}
-                            rows={3}
-                          />
-                        </div>
-                        <Button onClick={handleCreateMeme} className="w-full">
-                          <Send className="h-4 w-4 mr-2" />
-                          Kirim Meme
-                        </Button>
-                      </div>
+                      <MemeUpload
+                        onSuccess={() => {
+                          setShowCreateDialog(false)
+                          fetchMemes()
+                        }}
+                        onCancel={() => setShowCreateDialog(false)}
+                      />
                     </DialogContent>
                   </Dialog>
                 </>
