@@ -40,17 +40,18 @@ model User {
   updatedAt        DateTime  @updatedAt
 
   // Relations
-  memes            Meme[]
+  memes            Meme[]          @relation("UserMemes")
   comments         Comment[]
   votes            Vote[]
   badges           UserBadge[]
-  notifications    Notification[]
+  notifications    Notification[]  @relation("UserNotifications")
   bookmarks        Bookmark[]
-  reports          Report[]
-  referrals        Referral[]  @relation("Referrer")
-  referredByUser   Referral?   @relation("Referred")
-  followers        Follow[]    @relation("Follower")
-  following        Follow[]    @relation("Following")
+  reportsCreated   Report[]        @relation("ReportReporter")
+  reportsReceived  Report[]        @relation("ReportReportedUser")
+  referralsSent    Referral[]      @relation("Referrer")
+  referralReceived Referral?       @relation("Referred")
+  followers        Follow[]        @relation("Following")
+  following        Follow[]        @relation("Follower")
   topicFollows     TopicFollow[]
   transactions     Transaction[]
   sessions         Session[]
@@ -130,7 +131,7 @@ model Meme {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  author       User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author       User         @relation("UserMemes", fields: [authorId], references: [id], onDelete: Cascade)
   comments     Comment[]
   votes        Vote[]
   bookmarks    Bookmark[]
@@ -203,7 +204,7 @@ model Badge {
   createdAt   DateTime @default(now())
 
   // Relations
-  users       UserBadge[]
+  userBadges  UserBadge[]
 
   // Indexes
   @@index([category])
@@ -242,7 +243,7 @@ model Notification {
   createdAt DateTime @default(now())
 
   // Relations
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
 
   // Indexes
   @@index([userId])
@@ -285,9 +286,9 @@ model Report {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  reporter       User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter       User     @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
   meme           Meme?    @relation(fields: [memeId], references: [id])
-  reportedUser   User?    @relation(fields: [reportedUserId], references: [id])
+  reportedUser   User?    @relation("ReportReportedUser", fields: [reportedUserId], references: [id])
 
   // Indexes
   @@index([type])
@@ -460,6 +461,9 @@ model Ad {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Relations
+  adImpressions AdImpression[]
+
   // Indexes
   @@index([isActive])
   @@index([endDate])
@@ -487,4 +491,120 @@ model AdImpression {
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+}
+
+// Meme of the Day model
+model MemeOfTheDay {
+  id        String   @id @default(cuid())
+  memeId    String   @unique
+  date      DateTime @unique
+  votes     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  // Relations
+  meme      Meme     @relation(fields: [memeId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([date])
+}
+
+// User Activity Log
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // 'login', 'logout', 'create_meme', 'like', 'comment', 'follow'
+  details   String?  // JSON string with additional details
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// User Settings/Preferences
+model UserSettings {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  emailNotifications Boolean  @default(true)
+  pushNotifications Boolean  @default(true)
+  darkMode          Boolean  @default(false)
+  language          String   @default("en")
+  privacyLevel      String   @default("public") // 'public', 'friends', 'private'
+  contentFilter     String   @default("moderate") // 'strict', 'moderate', 'lenient'
+  autoplayVideos    Boolean  @default(true)
+  showNSFW          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Chat/Message model
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String
+  isRead     Boolean  @default(false)
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([senderId, receiverId])
+  @@index([createdAt])
+}
+
+// Premium Subscription Plans
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  price       Float
+  duration    Int      // in days
+  coinBonus   Int      @default(0)
+  badgeId     String?
+  features    String?  // JSON array of features
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  badge       Badge?   @relation(fields: [badgeId], references: [id])
+}
+
+// User Subscription
+model UserSubscription {
+  id               String   @id @default(cuid())
+  userId           String
+  planId           String
+  transactionId    String?  @unique
+  startDate        DateTime
+  endDate          DateTime
+  status           String   @default("active") // 'active', 'expired', 'cancelled'
+  autoRenew        Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan             SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  transaction      Transaction?     @relation(fields: [transactionId], references: [id])
+
+  // Indexes
+  @@unique([userId, planId])
+  @@index([userId])
+  @@index([status])
+  @@index([endDate])
 }
