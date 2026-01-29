@@ -55,8 +55,15 @@ export function DeleteAccountModal({
     }
 
     setLoading(true)
+    console.log('Starting account deletion...')
+    console.log('User has password:', userHasPassword)
+    console.log('Step:', step)
+    console.log('Password provided:', password ? 'Yes' : 'No')
+    console.log('Confirm text:', confirmText)
 
     try {
+      console.log('Sending DELETE request...')
+      
       const response = await fetch('/api/user/delete', {
         method: 'DELETE',
         headers: {
@@ -65,29 +72,39 @@ export function DeleteAccountModal({
         body: JSON.stringify({ password: userHasPassword ? password : undefined }),
       })
 
+      console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+      
       const data = await response.json()
+      console.log('Response data:', data)
 
       if (response.ok) {
+        console.log('Account deletion successful')
         toast.success('Akun berhasil dihapus')
         
-        // Redirect ke halaman utama
+        // Tunggu sebentar sebelum logout
         setTimeout(() => {
           signOut({ callbackUrl: '/' })
         }, 1500)
         
         onOpenChange(false)
       } else {
+        console.log('Account deletion failed:', data)
         toast.error(data.error || 'Gagal menghapus akun')
+        if (data.details) {
+          console.error('Error details:', data.details)
+        }
       }
     } catch (error) {
-      console.error('Error deleting account:', error)
-      toast.error('Terjadi kesalahan saat menghapus akun')
+      console.error('Network error deleting account:', error)
+      toast.error('Terjadi kesalahan jaringan saat menghapus akun')
     } finally {
       setLoading(false)
     }
   }
 
   const handleCancel = () => {
+    console.log('Cancelling account deletion')
     setStep('warning')
     setPassword('')
     setConfirmText('')
@@ -123,6 +140,9 @@ export function DeleteAccountModal({
                 <p className="font-semibold pt-2">
                   Data yang dihapus tidak dapat dikembalikan!
                 </p>
+                <p className="text-xs text-muted-foreground pt-1">
+                  User has password: {userHasPassword ? 'Yes' : 'No'}
+                </p>
               </div>
             )}
 
@@ -139,6 +159,7 @@ export function DeleteAccountModal({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Masukkan password Anda"
+                    autoComplete="current-password"
                   />
                 </div>
               </div>
@@ -161,6 +182,7 @@ export function DeleteAccountModal({
                     onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
                     placeholder="DELETE"
                     className="font-mono uppercase"
+                    autoComplete="off"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground pt-2">
