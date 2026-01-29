@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { signIn, signOut } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -68,11 +69,14 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [memes, setMemes] = useState<any[]>([])
   const [likedMemes, setLikedMemes] = useState<Set<string>>(new Set())
+  const [loadingLike, setLoadingLike] = useState<Set<string>>(new Set())
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [newMeme, setNewMeme] = useState({ title: '', imageUrl: '', caption: '', category: 'Funny' })
-  const [comments, setComments] = useState<{ [key: string]: string[] }>({})
+  const [comments, setComments] = useState<{ [key: string]: any[] }>({})
   const [newComments, setNewComments] = useState<{ [key: string]: string }>({})
   const [showComments, setShowComments] = useState<{ [key: string]: boolean }>({})
+  const [loadingComments, setLoadingComments] = useState<Set<string>>(new Set())
+  const [submittingComment, setSubmittingComment] = useState<Set<string>>(new Set())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -102,9 +106,24 @@ export default function HomePage() {
 
       if (data.success) {
         setMemes(data.data)
+        
+        // Fetch user's liked memes if authenticated
+        if (session?.user?.id) {
+          const votesResponse = await fetch(`/api/votes?userId=${session.user.id}`)
+          const votesData = await votesResponse.json()
+          if (votesData.success && votesData.data) {
+            const likedIds = votesData.data
+              .filter((vote: any) => vote.type === 'up')
+              .map((vote: any) => vote.memeId)
+            setLikedMemes(new Set(likedIds))
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching memes:', error)
+      toast.error('Gagal memuat meme', {
+        description: 'Terjadi kesalahan saat memuat meme'
+      })
     } finally {
       setLoading(false)
     }
@@ -117,36 +136,78 @@ export default function HomePage() {
     }
 
     try {
-      await fetch('/api/votes', {
+      // Add to loading state
+      setLoadingLike(prev => new Set(prev).add(memeId))
+
+      const isLiked = likedMemes.has(memeId)
+      const response = await fetch('/api/votes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           memeId,
-          type: likedMemes.has(memeId) ? 'down' : 'up',
+          type: isLiked ? 'down' : 'up',
           userId: session.user.id
         })
       })
 
-      setLikedMemes(prev => {
-        const newSet = new Set(prev)
-        if (newSet.has(memeId)) {
-          newSet.delete(memeId)
-        } else {
-          newSet.add(memeId)
-        }
-        return newSet
-      })
+      const result = await response.json()
 
-      // Update votes locally
-      setMemes(prev =>
-        prev.map(meme =>
-          meme.id === memeId
-            ? { ...meme, votes: meme.votes + (likedMemes.has(memeId) ? -1 : 1) }
-            : meme
-        )
-      )
+      if (result.success) {
+        // Update liked state
+        setLikedMemes(prev => {
+          const newSet = new Set(prev)
+          if (newSet.has(memeId)) {
+            newSet.delete(memeId)
+          } else {
+            newSet.add(memeId)
+          }
+          return newSet
+        })
+
+        // Update votes locally with the correct score from API
+        if (result.data?.score !== undefined) {
+          setMemes(prev =>
+            prev.map(meme =>
+              meme.id === memeId
+                ? { ...meme, votes: result.data.score }
+                : meme
+            )
+          )
+        } else {
+          // Fallback if API doesn't return score
+          setMemes(prev =>
+            prev.map(meme =>
+              meme.id === memeId
+                ? { ...meme, votes: meme.votes + (isLiked ? -1 : 1) }
+                : meme
+            )
+          )
+        }
+
+        // Show success toast
+        if (!isLiked) {
+          toast.success('Meme disukai!', {
+            description: 'Kamu mendapatkan 1 koin'
+          })
+        }
+      } else {
+        console.error('Failed to vote:', result.error)
+        toast.error('Gagal memproses like', {
+          description: result.error || 'Terjadi kesalahan'
+        })
+      }
     } catch (error) {
       console.error('Error voting:', error)
+      toast.error('Terjadi kesalahan', {
+        description: 'Gagal memproses like'
+      })
+    } finally {
+      // Remove from loading state
+      setLoadingLike(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(memeId)
+        return newSet
+      })
     }
   }
 
@@ -171,9 +232,45 @@ export default function HomePage() {
         setMemes([data.data, ...memes])
         setShowCreateDialog(false)
         setNewMeme({ title: '', imageUrl: '', caption: '', category: 'Funny' })
+        toast.success('Meme berhasil dibuat!', {
+          description: 'Meme kamu sekarang terlihat oleh semua orang'
+        })
+      } else {
+        toast.error('Gagal membuat meme', {
+          description: data.error || 'Terjadi kesalahan'
+        })
       }
     } catch (error) {
       console.error('Error creating meme:', error)
+      toast.error('Terjadi kesalahan', {
+        description: 'Gagal membuat meme'
+      })
+    }
+  }
+
+  const fetchComments = async (memeId: string) => {
+    if (comments[memeId]) return // Already loaded
+    
+    try {
+      setLoadingComments(prev => new Set(prev).add(memeId))
+      
+      const response = await fetch(`/api/comments?memeId=${memeId}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setComments(prev => ({
+          ...prev,
+          [memeId]: data.data
+        }))
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error)
+    } finally {
+      setLoadingComments(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(memeId)
+        return newSet
+      })
     }
   }
 
@@ -184,10 +281,12 @@ export default function HomePage() {
     }
 
     const comment = newComments[memeId]
-    if (!comment) return
+    if (!comment || !comment.trim()) return
 
     try {
-      await fetch('/api/comments', {
+      setSubmittingComment(prev => new Set(prev).add(memeId))
+      
+      const response = await fetch('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,21 +296,43 @@ export default function HomePage() {
         })
       })
 
-      setComments(prev => ({
-        ...prev,
-        [memeId]: [...(prev[memeId] || []), comment]
-      }))
-      setNewComments(prev => ({ ...prev, [memeId]: '' }))
+      const result = await response.json()
 
-      setMemes(prev =>
-        prev.map(meme =>
-          meme.id === memeId
-            ? { ...meme, _count: { ...meme._count, comments: (meme._count?.comments || 0) + 1 } }
-            : meme
+      if (result.success) {
+        setComments(prev => ({
+          ...prev,
+          [memeId]: [...(prev[memeId] || []), result.data]
+        }))
+        setNewComments(prev => ({ ...prev, [memeId]: '' }))
+
+        setMemes(prev =>
+          prev.map(meme =>
+            meme.id === memeId
+              ? { ...meme, _count: { ...meme._count, comments: (meme._count?.comments || 0) + 1 } }
+              : meme
+          )
         )
-      )
+
+        toast.success('Komentar berhasil dikirim!', {
+          description: 'Kamu mendapatkan 5 koin'
+        })
+      } else {
+        console.error('Failed to add comment:', result.error)
+        toast.error('Gagal mengirim komentar', {
+          description: result.error || 'Terjadi kesalahan'
+        })
+      }
     } catch (error) {
       console.error('Error adding comment:', error)
+      toast.error('Terjadi kesalahan', {
+        description: 'Gagal mengirim komentar'
+      })
+    } finally {
+      setSubmittingComment(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(memeId)
+        return newSet
+      })
     }
   }
 
@@ -273,15 +394,21 @@ export default function HomePage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => handleLike(meme.id)}
+                disabled={loadingLike.has(meme.id)}
                 className={`flex items-center gap-2 ${likedMemes.has(meme.id) ? 'text-red-500' : ''}`}
               >
-                <Heart className={`h-4 w-4 ${likedMemes.has(meme.id) ? 'fill-current' : ''}`} />
+                <Heart className={`h-4 w-4 ${likedMemes.has(meme.id) ? 'fill-current' : ''} ${loadingLike.has(meme.id) ? 'animate-pulse' : ''}`} />
                 <span className="text-sm font-semibold">{meme.votes || 0}</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setShowComments(prev => ({ ...prev, [meme.id]: !prev[meme.id] }))}
+                onClick={() => {
+                  setShowComments(prev => ({ ...prev, [meme.id]: !prev[meme.id] }))
+                  if (!showComments[meme.id]) {
+                    fetchComments(meme.id)
+                  }
+                }}
                 className="flex items-center gap-2"
               >
                 <MessageCircle className="h-4 w-4" />
@@ -299,23 +426,47 @@ export default function HomePage() {
           </div>
           {showComments[meme.id] && (
             <div className="mt-4 space-y-3">
-              <ScrollArea className="max-h-48">
-                {(comments[meme.id] || []).map((comment, idx) => (
-                  <div key={idx} className="text-sm p-2 bg-muted/50 rounded-lg">
-                    <span className="font-semibold">{session?.user?.name}: </span>
-                    {comment}
-                  </div>
-                ))}
-              </ScrollArea>
+              {loadingComments.has(meme.id) ? (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Memuat komentar...
+                </div>
+              ) : (
+                <ScrollArea className="max-h-48">
+                  {(comments[meme.id] || []).map((comment: any) => (
+                    <div key={comment.id} className="text-sm p-2 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Avatar className="h-5 w-5">
+                          <AvatarImage src={comment.user?.image || undefined} />
+                          <AvatarFallback className="text-xs">
+                            {comment.user?.name?.substring(0, 2).toUpperCase() || '?'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-semibold">{comment.user?.name || 'Unknown'}</span>
+                      </div>
+                      <p className="ml-7">{comment.content}</p>
+                    </div>
+                  ))}
+                </ScrollArea>
+              )}
               <div className="flex gap-2">
                 <Input
                   placeholder="Tulis komentar..."
                   value={newComments[meme.id] || ''}
                   onChange={(e) => setNewComments(prev => ({ ...prev, [meme.id]: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && handleComment(meme.id)}
+                  disabled={submittingComment.has(meme.id)}
                   className="flex-1"
                 />
-                <Button size="sm" onClick={() => handleComment(meme.id)}>
-                  <Send className="h-4 w-4" />
+                <Button 
+                  size="sm" 
+                  onClick={() => handleComment(meme.id)}
+                  disabled={submittingComment.has(meme.id)}
+                >
+                  {submittingComment.has(meme.id) ? (
+                    <Sparkles className="h-4 w-4 animate-pulse" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>

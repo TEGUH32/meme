@@ -27,6 +27,7 @@ import {
   Crown
 } from 'lucide-react'
 import { useState } from 'react'
+import { NotificationBell } from './notification-bell'
 
 interface NavbarProps {
   onCreateMeme?: () => void
@@ -84,6 +85,7 @@ export function Navbar({ onCreateMeme }: NavbarProps) {
                   <Bookmark className="h-4 w-4" />
                   <span>Bookmark</span>
                 </Button>
+                <NotificationBell />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="relative">
