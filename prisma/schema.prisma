@@ -21,6 +21,9 @@ model User {
   location      String?
   website       String?
   googleId      String?  @unique
+  settingsNotifications String? 
+  settingsPrivacy      String?  
+  settingsAppearance   String?  
   coins         Int      @default(0)
   level         Int      @default(1)
   totalMemes    Int      @default(0)
